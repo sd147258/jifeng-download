@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity implements TaskAdapter.Actions {
 
     private static final Pattern FILE_RE = Pattern.compile(
-            "\\.(zip|rar|7z|tar|gz|exe|apk|ipa|pdf|epub|mp4|mkv|avi|mov|mp3|flac|wav|docx?|xlsx?|pptx?|txt|csv|iso|bin)(\\?|#|$)",
+            "\\\\.(zip|rar|7z|tar|gz|exe|apk|ipa|pdf|epub|mp4|mkv|avi|mov|mp3|flac|wav|docx?|xlsx?|pptx?|txt|csv|iso|bin)(\\\\?|#|$)",
             Pattern.CASE_INSENSITIVE);
 
     private EditText input;
@@ -951,6 +951,10 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
 
     public void onOpen(DownloadEngine.Task t) {
         // 正在下载的单流媒体：走本机 HTTP 边下边播，不用等下载完。
+        if (!"done".equals(t.status) && isAsf(t.filename)) {
+            toast("WMV/WMA 是微软 ASF 封装，不支持边下边播；下载完用其他播放器打开");
+            return;
+        }
         if (!"done".equals(t.status) && isMedia(t.filename)) {
             if (t.segments.size() > 1) {
                 toast("这是多段并行的任务，等下载完再播放才不会有花屏");
@@ -984,7 +988,8 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
             toast("已保存到「下载/疾风下载/" + t.publicUri.substring(7) + "」，用文件管理器查看");
             return;
         }
-        if (isMedia(t.filename)) {
+        if (isAsf(t.filename)) toast("WMV/WMA 系统播放器解不了，已交给其他播放器打开");
+        if (isMedia(t.filename) && !isAsf(t.filename)) {
             Intent p = new Intent(this, PlayerActivity.class)
                     .putExtra(PlayerActivity.EXTRA_URI, t.publicUri)
                     .putExtra(PlayerActivity.EXTRA_NAME, t.filename)
@@ -1006,12 +1011,20 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         }
     }
 
+    /** 微软 ASF 封装（wmv/wma/asf）：系统解码器基本不支持，直接交给外部播放器。 */
+    private boolean isAsf(String name) {
+        if (name == null) return false;
+        String n = name.toLowerCase();
+        return n.endsWith(".wmv") || n.endsWith(".wma") || n.endsWith(".asf");
+    }
+
     /** 是否是可直接播放的音视频。 */
     private boolean isMedia(String name) {
         if (name == null) return false;
         String n = name.toLowerCase();
         String[] exts = {".mp4", ".mkv", ".mov", ".flv", ".webm", ".m4v", ".3gp", ".ts", ".avi",
-                ".mp3", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".opus"};
+                ".mp3", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".opus",
+                ".wmv", ".wma", ".asf"};
         for (String e : exts) if (n.endsWith(e)) return true;
         return false;
     }
@@ -1028,6 +1041,9 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         if (n.endsWith(".3gp")) return "video/3gpp";
         if (n.endsWith(".ts")) return "video/mp2t";
         if (n.endsWith(".avi")) return "video/x-msvideo";
+        if (n.endsWith(".wmv")) return "video/x-ms-wmv";
+        if (n.endsWith(".wma")) return "audio/x-ms-wma";
+        if (n.endsWith(".asf")) return "video/x-ms-asf";
         if (n.endsWith(".mp3")) return "audio/mpeg";
         if (n.endsWith(".m4a") || n.endsWith(".aac")) return "audio/mp4";
         if (n.endsWith(".flac")) return "audio/flac";
