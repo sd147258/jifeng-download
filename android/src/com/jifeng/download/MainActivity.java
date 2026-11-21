@@ -246,6 +246,8 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         if (intent.getBooleanExtra("auto_open", false)) {
             autoOpen = true;
             autoOpenArmed = true;
+            autoOpenPrimed = false;
+            autoOpenSeen.clear();
         }
         if (intent.getBooleanExtra("meta_only", false)) BtDownloader.metaProbeOnly = true;
         if (intent.getBooleanExtra("dht_debug", false)) Dht.DEBUG = true;
@@ -777,6 +779,8 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
     /** 自检开关：--ez auto_open true 时，任务一下载完就自动点「打开」（验证软解链路用）。 */
     private boolean autoOpen;
     private boolean autoOpenArmed;
+    private boolean autoOpenPrimed;
+    private final java.util.HashSet<String> autoOpenSeen = new java.util.HashSet<String>();
 
     private void refresh() {
         List<DownloadEngine.Task> tasks = DownloadService.snapshot();
@@ -829,9 +833,20 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         for (String f : fails) toast(f);
 
         if (autoOpen && autoOpenArmed) {
+            if (!autoOpenPrimed) {
+                // 第一次刷新把已有完成态记下来，之后只认“新完成的那个”
+                for (DownloadEngine.Task t : tasks) {
+                    if ("done".equals(t.status) && isAsf(t.filename) && t.id != null) {
+                        autoOpenSeen.add(t.id);
+                    }
+                }
+                autoOpenPrimed = true;
+            }
             for (final DownloadEngine.Task t : tasks) {
-                if ("done".equals(t.status) && isAsf(t.filename)) {
+                if ("done".equals(t.status) && isAsf(t.filename)
+                        && t.id != null && !autoOpenSeen.contains(t.id)) {
                     autoOpenArmed = false;
+                    autoOpenSeen.add(t.id);
                     handler.postDelayed(new Runnable() {
                         public void run() {
                             onOpen(t);
@@ -1042,7 +1057,7 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
             return;
         }
         final android.app.ProgressDialog d = new android.app.ProgressDialog(this);
-        d.setTitle("正在软解 WMV");
+        d.setTitle("正在软解 WMV/WMA");
         d.setMessage("准备中…");
         d.setCancelable(false);
         d.show();
@@ -1058,7 +1073,8 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
                 Intent p = new Intent(MainActivity.this, PlayerActivity.class)
                         .putExtra(PlayerActivity.EXTRA_URI, uri.toString())
                         .putExtra(PlayerActivity.EXTRA_NAME, shown + "（已转码）")
-                        .putExtra(PlayerActivity.EXTRA_MIME, "video/mp4");
+                        .putExtra(PlayerActivity.EXTRA_MIME,
+                                shown.toLowerCase().endsWith(".m4a") ? "audio/mp4" : "video/mp4");
                 try {
                     startActivity(p);
                     toast("已转成 MP4 保存到 下载/疾风下载/转换");
