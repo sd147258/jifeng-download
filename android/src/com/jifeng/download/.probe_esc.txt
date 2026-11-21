@@ -1,2 +1,0 @@
-single: \a end
-double: \\b end
