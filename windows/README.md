@@ -323,3 +323,14 @@ Windows 自带播放器能放 WMV，所以「打开」不用改，双击就是�
 ```
 
 回归 `test_engine.py` 仍 0 fail；exe 重新打包后 PYZ 里 `bt / dht / engine / ftp / sniffer` 均在。
+
+## v1.16：Windows 端磁力解析与 DHT 跟 Android 3.16 对齐
+
+- `bt.looks_like_magnet` 放宽为任意 `magnet:` 前缀，大写 `MAGNET:` 也能识别
+- `bt.parse_magnet` 同步多 `xt` / `btmh` / base32 / `x.pe` / `ws`，无有效 hash 返回 `None`
+- 新增 `bt.magnet_error(text)`：v2-only、无 `xt`、`xt` 里没有可用 btih 三类可读原因，`engine.py` 在磁力校验失败时直接用它当任务错误消息
+- `bt.get_peers` 先把 `x.pe` 塞进候选 peer，DHT 预算 12.0 s → 18.0 s
+- `dht.py` 引导节点 4 → 6（补 `dht.aelitis.com:6881`、`router.bitcomet.com:6881`），`MAX_QUERIES 128`、`BATCH 16`、`ROUND 2.2`，节点池跨次复用（最多 160），新增 `LAST_STATS` / `LAST_RESP` 供失败诊断
+- 自测脚本 `test_magnet_parse.py`（7 例：hex+x.pe、base32、v1+v2 混合、v2-only、无 xt、非法 hex、ws）全部通过
+
+exe 已按 `JifengDownload.spec` 重新打包（13,204,621 B），PYZ 内 `bt` / `dht` / `engine` / `ftp` / `sniffer` 五个模块均在。
