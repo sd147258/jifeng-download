@@ -112,7 +112,7 @@ adb reverse tcp:8000 tcp:8000
 - 播放器：进度条可拖动定位、当前/总时长、暂停继续、全屏（横屏 + 隐藏系统栏，返回键先退全屏）、「其他播放器」兜底、「关闭」。
 - 支持格式：mp4/m4v/mkv/mov/flv/webm/3gp/ts/avi 与 mp3/m4a/aac/flac/wav/ogg/opus；编码不被系统支持时给出中文原因（如部分 MKV/HEVC）。
 - 播放不打断正在进行的下载；退出播放页会 stopPlayback 并释放 VideoView。
-- 自检入口：\u0007db shell am start -n com.jifeng.download/.MainActivity --es play_uri <地址> 可直接拉起播放器，便于无触摸环境下验证。
+- 自检入口：db shell am start -n com.jifeng.download/.MainActivity --es play_uri <地址> 可直接拉起播放器，便于无触摸环境下验证。
 
 ## 任务分组（v1.9）
 - 顶部三个页签：进行中 / 已完成 / 失败，括号内是数量，切换后列表只显示该组。
@@ -511,3 +511,38 @@ ASF 是微软私有封装，Android 系统解码器基本不支持，站内播�
 | `/ctonly` | `video/x-ms-wmv` + 随机字节 | `ctonly.wmv`（靠 Content-Type） | 1,048,576 B |
 
 三个任务全部「已完成」，文件在 `下载/疾风下载/`。
+
+## v3.13：内置软解，WMV/WMA 站内直接播
+
+上一版只能「识别 + 甩给外部播放器」，系统播放器基本都解不了 ASF。这一版把解码器直接塞进了 APK：
+下载完 WMV/WMA 点开时，先在应用内用它转成 MP4（视频走 mpeg4 + AAC），再交给站内播放器播。
+不联网找解码器、不需要用户装第三方播放器。
+
+### 怎么做的
+
+- **解码器**：APK 内置 `lib/{arm64-v8a,x86_64}/libffmpeg.so` 与配套 `libc++_shared.so`，
+  运行时从 `nativeLibraryDir` 直接执行。两个 ABI 各一套。
+- **转码**：`Wmv.java` 负责
+  1. 把源文件复制到应用缓存（`cacheDir/wmv`）；
+  2. 跑 `ffmpeg -i 源 [-c:v mpeg4 -q:v 4 | -vn] -c:a aac -b:a 128k -movflags +faststart 目标`；
+  3. 失败自动重试一次「只转音频」（有些片源视频流坏、音频正常）；
+  4. 产物发布到 `下载/疾风下载/转换/`（API 29+ 走 MediaStore，老系统走公共目录），
+     并把 `content://` 记在 `SharedPreferences`，同一个文件不重复转。
+- **播放**：转完立刻用站内播放器打开这个 MP4；转码失败才回退系统播放器并提示原因。
+- **线程**：转码在后台线程，`onProgress/onDone/onError` 全部经主线程 `Handler` 回调，
+  避免后台线程直接弹 Toast 触发 `Looper` 崩溃。
+
+### 设备实测（emulator-5556，x86_64）
+
+| 用例 | 源 | 产物 | 结果 |
+|---|---|---|---|
+| WMV | `real.wmv` 1,053,887 B | `转换/real.mp4` 681,899 B | 站内播放器播放，0:10/0:10，画面正常 |
+| WMA | `real.wma` 128,786 B | `转换/real.mp4` 163,469 B | 站内播放器播放，纯音频 0:10/0:10 |
+
+### 注意事项
+
+- 内置的 ffmpeg 是第三方预编译包，构建配置含 GPL 组件，**仅本机自用，不随源码分发**；
+  公开仓库只放源码与构建脚本，`jni/*.so` 与含 `.so` 的 APK 不进仓库。
+- APK 因此从约 148 KB 涨到约 106 MB（两套 ABI 的解码器）。只想装手机的话，可以只保留
+  arm64-v8a（约 47 MB）出包，模拟器调试用 x86_64。
+- arm64-v8a 那套只做了打包与静态检查，手上没有 arm64 真机/模拟器，未做实机播放验证。
