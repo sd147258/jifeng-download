@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">疾风下载</string>
+    <string name="subtitle">动态分段 · 断点续传 · DHT</string>
+    <string name="hint_url">粘贴直链 / 磁力链 / 分享文案，一次多条也可以</string>
+    <string name="paste">粘贴</string>
+    <string name="download">下载</string>
+    <string name="settings">设置</string>
+    <string name="disclaimer">仅用于下载你有权获取的文件</string>
+    <string name="empty">还没有任务\n从浏览器分享链接，或粘贴直链开始下载</string>
+    <string name="waiting">等待开始</string>
+    <string name="decode">超级解码</string>
+    <string name="sel_title">已选 %1$d 项</string>
+    <string name="batch_pause">暂停</string>
+    <string name="batch_delete">删除</string>
+    <string name="exit_sel">退出</string>
+    <string name="grab_page">抓本页全部链接 ›</string>
+</resources>
+
