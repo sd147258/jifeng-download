@@ -15,17 +15,23 @@ import bt
 
 BOOTSTRAP = [
     ("router.bittorrent.com", 6881),
-    ("dht.transmissionbt.com", 6881),
     ("router.utorrent.com", 6881),
+    ("dht.transmissionbt.com", 6881),
     ("dht.libtorrent.org", 25401),
+    ("dht.aelitis.com", 6881),
+    ("router.bitcomet.com", 6881),
 ]
-MAX_QUERIES = 96
+MAX_QUERIES = 128
 MAX_CAND = 400
 MAX_PEERS = 200
-BATCH = 8
-ROUND = 1.8
+BATCH = 16
+ROUND = 2.2
 
 EXTRA = []          # 自检 / 自定义引导节点 [(host, port)]
+_POOL = []          # 上次学到的节点，下次直接当起点
+POOL_MAX = 160
+LAST_STATS = ""
+LAST_RESP = 0
 
 # 同一个 info_hash 10 分钟内复用 peer，重复「继续」不再走一轮 DHT
 CACHE_TTL = 600
@@ -75,8 +81,9 @@ def _peers_from(resp):
     return peers, nodes
 
 
-def find_peers(hash_hex, budget=12.0, extra=None, debug=False):
+def find_peers(hash_hex, budget=18.0, extra=None, debug=False):
     """返回 [(ip, port)]，可能为空。budget 单位秒。"""
+    global LAST_STATS, LAST_RESP
     if not hash_hex or len(hash_hex) != 40:
         return []
     key = hash_hex.lower()
@@ -87,12 +94,14 @@ def find_peers(hash_hex, budget=12.0, extra=None, debug=False):
     self_id = bytes(random.getrandbits(8) for _ in range(20))
     ids = {}            # addr -> node id
     cands = []          # [(addr, id or None)]
-    for n in list(extra or []) + list(EXTRA) + list(BOOTSTRAP):
+    seed = list(extra or []) + list(EXTRA) + list(_POOL) + list(BOOTSTRAP)
+    for n in seed:
         a = (n[0], int(n[1]))
         if a not in ids and a not in [c[0] for c in cands]:
             cands.append((a, None))
     asked = set()
     peers = []
+    resp_n = 0
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(ROUND)
     deadline = time.time() + max(2.0, budget)
@@ -125,6 +134,8 @@ def find_peers(hash_hex, budget=12.0, extra=None, debug=False):
                     continue
                 if isinstance(resp, tuple):
                     resp = resp[0]
+                if isinstance(resp, dict) and resp.get(b"y") == b"r":
+                    resp_n += 1
                 got_peers, got_nodes = _peers_from(resp)
                 if debug:
                     r = resp.get(b"r") if isinstance(resp, dict) else {}
@@ -149,4 +160,9 @@ def find_peers(hash_hex, budget=12.0, extra=None, debug=False):
         if len(_CACHE) > 24:
             _CACHE.clear()
         _CACHE[key] = (time.time(), list(peers))
+    # 把这次学到的节点留作下次起点
+    _POOL[:] = [c[0] for c in cands][:POOL_MAX]
+    LAST_STATS = "询问 %d 个节点，收到 %d 个回应，学到 %d 个节点，找到 %d 个 peer" % (
+        len(asked), resp_n, len(cands), len(peers))
+    LAST_RESP = resp_n
     return peers
