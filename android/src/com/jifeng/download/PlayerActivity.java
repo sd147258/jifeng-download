@@ -208,7 +208,7 @@ public class PlayerActivity extends Activity {
                     return true;
                 }
                 showFail(reason(what, extra) + (isStream
-                        ? "\\n\\n这是边下边播：当前网速跟不上视频码率。建议等下载完成后再打开，或换到更快的网络。"
+                        ? "\n\n这是边下边播：当前网速跟不上视频码率。建议等下载完成后再打开，或换到更快的网络。"
                         : ""));
                 return true;
             }
@@ -217,7 +217,7 @@ public class PlayerActivity extends Activity {
             public boolean onInfo(MediaPlayer mp, int what, int extra) {
                 if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
                     failMsg.setVisibility(View.VISIBLE);
-                    failMsg.setText("网络较慢，正在缓冲…\\n下载追上播放进度后会接着放。");
+                    failMsg.setText("网络较慢，正在缓冲…\n下载追上播放进度后会接着放。");
                 } else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END) {
                     if (prepared) failMsg.setVisibility(View.GONE);
                 }
@@ -242,8 +242,8 @@ public class PlayerActivity extends Activity {
                 public void run() {
                     if (prepared) return;
                     failMsg.setVisibility(View.VISIBLE);
-                    failMsg.setText("正在缓冲…\\n"
-                            + "边下边播时，播放器要先拿到视频索引和前段数据才会出画面。\\n"
+                    failMsg.setText("正在缓冲…\n"
+                            + "边下边播时，播放器要先拿到视频索引和前段数据才会出画面。\n"
                             + "网速偏慢时会多等一会儿，下载追上后自动开始。");
                     ctrlBar.setVisibility(View.VISIBLE);
                 }
@@ -260,7 +260,7 @@ public class PlayerActivity extends Activity {
         } catch (Exception ignored) {
         }
         failMsg.setVisibility(View.VISIBLE);
-        failMsg.setText("网络较慢，正在缓冲…（第 " + streamRetries + " 次）\\n"
+        failMsg.setText("网络较慢，正在缓冲…（第 " + streamRetries + " 次）\n"
                 + "下载追上播放进度后会自动继续。");
         ctrlBar.setVisibility(View.VISIBLE);
         final long delay = 3000L + 2000L * streamRetries;
@@ -432,7 +432,7 @@ public class PlayerActivity extends Activity {
         ctrlBar.setVisibility(View.GONE);
         video.setVisibility(View.GONE);
         failMsg.setVisibility(View.VISIBLE);
-        failMsg.setText(why + "\\n\\n可以试试「用其他播放器打开」。");
+        failMsg.setText(why + "\n\n可以试试「用其他播放器打开」。");
         new AlertDialog.Builder(this)
                 .setTitle("播放失败")
                 .setMessage(why)
