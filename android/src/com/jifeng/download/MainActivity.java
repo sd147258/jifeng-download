@@ -243,6 +243,10 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         String noDht = intent.getStringExtra("no_dht");
         if (noDht != null) BtDownloader.dhtEnabled = !"1".equals(noDht) && !"true".equals(noDht);
         if (intent.getBooleanExtra("force_dht", false)) BtDownloader.forceDht = true;
+        if (intent.getBooleanExtra("auto_open", false)) {
+            autoOpen = true;
+            autoOpenArmed = true;
+        }
         if (intent.getBooleanExtra("meta_only", false)) BtDownloader.metaProbeOnly = true;
         if (intent.getBooleanExtra("dht_debug", false)) Dht.DEBUG = true;
         if (intent.getBooleanExtra("dht_only", false)) BtDownloader.dhtProbeOnly = true;
@@ -770,6 +774,9 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
 
     // ------------------------------------------------------------ 列表刷新
     private long lastListSig = -1;
+    /** 自检开关：--ez auto_open true 时，任务一下载完就自动点「打开」（验证软解链路用）。 */
+    private boolean autoOpen;
+    private boolean autoOpenArmed;
 
     private void refresh() {
         List<DownloadEngine.Task> tasks = DownloadService.snapshot();
@@ -820,6 +827,20 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
 
         List<String> fails = DownloadService.drainDeleteFailures();
         for (String f : fails) toast(f);
+
+        if (autoOpen && autoOpenArmed) {
+            for (final DownloadEngine.Task t : tasks) {
+                if ("done".equals(t.status) && isAsf(t.filename)) {
+                    autoOpenArmed = false;
+                    handler.postDelayed(new Runnable() {
+                        public void run() {
+                            onOpen(t);
+                        }
+                    }, 400);
+                    break;
+                }
+            }
+        }
 
         double total = 0;
         int running = 0;
@@ -988,8 +1009,11 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
             toast("已保存到「下载/疾风下载/" + t.publicUri.substring(7) + "」，用文件管理器查看");
             return;
         }
-        if (isAsf(t.filename)) toast("WMV/WMA 系统播放器解不了，已交给其他播放器打开");
-        if (isMedia(t.filename) && !isAsf(t.filename)) {
+        if (isAsf(t.filename)) {
+            convertThenPlay(t);
+            return;
+        }
+        if (isMedia(t.filename)) {
             Intent p = new Intent(this, PlayerActivity.class)
                     .putExtra(PlayerActivity.EXTRA_URI, t.publicUri)
                     .putExtra(PlayerActivity.EXTRA_NAME, t.filename)
@@ -1011,7 +1035,55 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         }
     }
 
-    /** 微软 ASF 封装（wmv/wma/asf）：系统解码器基本不支持，直接交给外部播放器。 */
+    /** WMV/WMA：用内置 ffmpeg 转成 MP4（mpeg4+aac）再进站内播放器。 */
+    private void convertThenPlay(final DownloadEngine.Task t) {
+        if (t.publicUri == null || t.publicUri.length() == 0) {
+            toast("先把文件保存到下载目录再播放");
+            return;
+        }
+        final android.app.ProgressDialog d = new android.app.ProgressDialog(this);
+        d.setTitle("正在软解 WMV");
+        d.setMessage("准备中…");
+        d.setCancelable(false);
+        d.show();
+        Wmv.convert(this, t.publicUri, t.filename, new Wmv.Listener() {
+            public void onProgress(String note) {
+                d.setMessage(note);
+            }
+            public void onDone(android.net.Uri uri, String shown) {
+                try {
+                    d.dismiss();
+                } catch (Exception ignored) {
+                }
+                Intent p = new Intent(MainActivity.this, PlayerActivity.class)
+                        .putExtra(PlayerActivity.EXTRA_URI, uri.toString())
+                        .putExtra(PlayerActivity.EXTRA_NAME, shown + "（已转码）")
+                        .putExtra(PlayerActivity.EXTRA_MIME, "video/mp4");
+                try {
+                    startActivity(p);
+                    toast("已转成 MP4 保存到 下载/疾风下载/转换");
+                } catch (Exception e) {
+                    toast("播放器启动失败：" + e.getClass().getSimpleName());
+                }
+            }
+            public void onError(String msg) {
+                try {
+                    d.dismiss();
+                } catch (Exception ignored) {
+                }
+                toast("软解失败：" + msg + "（改用外部播放器试试）");
+                try {
+                    Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setDataAndType(android.net.Uri.parse(t.publicUri), mimeFor(t.filename));
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(i);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    /** 微软 ASF 封装（wmv/wma/asf）：系统解码器基本不支持。 */
     private boolean isAsf(String name) {
         if (name == null) return false;
         String n = name.toLowerCase();
