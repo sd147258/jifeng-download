@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity implements TaskAdapter.Actions {
 
     private static final Pattern FILE_RE = Pattern.compile(
-            "\\.(zip|rar|7z|tar|gz|exe|apk|ipa|pdf|epub|mp4|mkv|avi|mov|mp3|flac|wav|docx?|xlsx?|pptx?|txt|csv|iso|bin)(\\?|#|$)",
+            "\\\\.(zip|rar|7z|tar|gz|exe|apk|ipa|pdf|epub|mp4|mkv|avi|mov|mp3|flac|wav|docx?|xlsx?|pptx?|txt|csv|iso|bin)(\\\\?|#|$)",
             Pattern.CASE_INSENSITIVE);
 
     private EditText input;
@@ -565,7 +565,7 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         if (Magnet.looksLike(raw)) {
             Magnet m = Magnet.parse(raw);
             if (m == null || !m.valid()) {
-                toast("磁力链里没找到 btih 信息哈希，请确认复制完整");
+                toast(m == null ? "磁力链格式不对：应以 magnet:? 开头" : m.errorHint());
                 return;
             }
             addToQueue(raw, "", "");
@@ -629,7 +629,7 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
                     if (Magnet.looksLike(link)) {
                         Magnet m = Magnet.parse(link);
                         if (m == null || !m.valid()) {
-                            fails.add("磁力链缺 btih");
+                            fails.add(m != null && m.v2Only() ? "v2(btmh) 磁力暂不支持" : "磁力链缺 btih");
                         } else {
                             jobs.add(new String[]{link, "", ""});
                         }
