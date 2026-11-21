@@ -61,7 +61,7 @@ def handle(conn, ordinal):
         rate = rate_for(ordinal)
         print("[conn %d] %s %d-%d rate=%dKB/s" % (ordinal, code, start, end, rate // 1024), flush=True)
         head = "HTTP/1.1 %s\r\nContent-Length: %d\r\nContent-Type: application/octet-stream\r\n" \
-               "Accept-Ranges: bytes\r\nContent-Range: bytes %d-%d/%d\r\nConnection: close\r\r\n" \
+               "Accept-Ranges: bytes\r\nContent-Range: bytes %d-%d/%d\r\nConnection: close\r\n\r\n" \
                % (code, length, start, end, SIZE)
         conn.sendall(head.encode())
         with open(fh_path, "rb") as f:
