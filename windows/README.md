@@ -307,3 +307,19 @@ hot  peers=1 0.0000s
 
 回归：`test_engine.py` 0 fail；`test_dht_bt.py`（磁力完全不带 `tr=`、只靠 DHT 找源）
 下完 `mov_bbb.mp4` 788,493 B，md5 `198918f40ecc7cab0fc4231adaf67c96`，2.5 s / 1 peer。
+
+## v1.15：WMV / WMA 识别
+
+和 Android 侧同一套规则：`CONTENT_TYPE_EXT` 补 `video/x-ms-wmv`、`video/x-ms-asf`、
+`application/vnd.ms-asf`、`audio/x-ms-wma`；`ext_from_head` 补 ASF 魔数 → `.wmv`。
+Windows 自带播放器能放 WMV，所以「打开」不用改，双击就是默认关联程序。
+
+实测（`test_wmv.py`，同一个本地服务）：
+
+```
+/movie.wmv   status=done name=movie.wmv  size=1048592 ext_ok=True
+/noext       status=done name=noext.wmv  size=1048592 ext_ok=True   # 只有 ASF 头
+/ctonly      status=done name=ctonly.wmv size=1048576 ext_ok=True   # 只有 Content-Type
+```
+
+回归 `test_engine.py` 仍 0 fail；exe 重新打包后 PYZ 里 `bt / dht / engine / ftp / sniffer` 均在。
