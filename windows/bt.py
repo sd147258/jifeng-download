@@ -114,8 +114,18 @@ def dict_end(data):
 def looks_like_magnet(text):
     if not text:
         return False
-    t = text.strip().lower()
-    return t.startswith("magnet:") and "xt=urn:btih:" in t
+    return text.strip().lower().startswith("magnet:")
+
+
+def magnet_error(text):
+    """解析失败时给用户看的原因。"""
+    low = (text or "").lower()
+    if "btmh:" in low and "btih:" not in low:
+        return ("这是 BitTorrent v2（btmh）磁力链，当前版本只支持 v1（btih）："
+                "换一条同时带 btih 的混合链，或换 v1 资源。")
+    if "xt=" not in low:
+        return "这条 magnet 里没有 xt= 参数，确认链接复制完整了吗？"
+    return "磁力链里没找到 btih 信息哈希（xt=urn:btih: 40 位哈希），请确认复制完整。"
 
 
 def parse_magnet(text):
@@ -124,20 +134,43 @@ def parse_magnet(text):
     t = text.strip()
     if not t.lower().startswith("magnet:"):
         return None
-    q = t[len("magnet:?"):] if "?" in t else t[len("magnet:"):]
+    q = t.split("?", 1)[1] if "?" in t else ""
     params = urllib.parse.parse_qs(q, keep_blank_values=True)
-    xt = params.get("xt", [""])[0]
-    if not xt.lower().startswith("urn:btih:"):
-        return None
-    h = xt.split(":", 2)[2].strip()
-    if len(h) == 40:
-        try:
-            raw = bytes.fromhex(h)
-        except ValueError:
-            return None
-    elif len(h) == 32:
-        raw = base64.b32decode(h.upper())
-    else:
+    raw = None
+    v2_hex = ""
+    for xt in params.get("xt", []):
+        low = xt.strip().lower()
+        h = ""
+        if low.startswith("urn:btih:"):
+            h = xt.strip()[9:]
+        elif low.startswith("btih:"):
+            h = xt.strip()[5:]
+        if h:
+            h = h.rstrip("=")
+            if len(h) == 40:
+                try:
+                    raw = bytes.fromhex(h)
+                except ValueError:
+                    continue
+            elif len(h) == 32:
+                try:
+                    raw = base64.b32decode(h.upper())
+                except Exception:
+                    continue
+            if raw is not None and raw:
+                break
+            continue
+        mh = ""
+        if low.startswith("urn:btmh:"):
+            mh = xt.strip()[9:]
+        elif low.startswith("btmh:"):
+            mh = xt.strip()[5:]
+        mh = mh.strip().lower()
+        if len(mh) == 68 and mh.startswith("1220"):
+            v2_hex = mh[4:]
+        elif len(mh) == 64:
+            v2_hex = mh
+    if not raw:
         return None
     info = {
         "info_hash": raw,
@@ -145,6 +178,9 @@ def parse_magnet(text):
         "name": urllib.parse.unquote(params.get("dn", [""])[0] or ""),
         "trackers": [urllib.parse.unquote(x) for x in params.get("tr", [])],
         "length": int(params.get("xl", ["0"])[0] or 0),
+        "peers": [x for x in params.get("x.pe", []) if ":" in x],
+        "web_seeds": [urllib.parse.unquote(x) for x in params.get("ws", [])],
+        "v2_hex": v2_hex,
     }
     return info
 
@@ -233,6 +269,13 @@ def announce_udp(tracker, m, left, port=6881):
 
 def get_peers(m, left):
     out = []
+    # 磁力链里直接给的 x.pe 先算进去，不依赖 tracker/DHT
+    for a in m.get("peers", []) or []:
+        try:
+            host, _, port = a.rpartition(":")
+            out.append((host.strip("[]"), int(port)))
+        except Exception:
+            continue
     for tr in m.get("trackers", [])[:6]:
         try:
             if tr.lower().startswith("udp://"):
@@ -252,7 +295,7 @@ def get_peers(m, left):
         # tracker 全挂 / 压根没 tr=：退到 DHT 按 info_hash 找 peer（BEP5）
         try:
             import dht
-            uniq = dht.find_peers(m.get("hash_hex") or "", 12.0)
+            uniq = dht.find_peers(m.get("hash_hex") or "", 18.0)
         except Exception:
             uniq = []
     return uniq
