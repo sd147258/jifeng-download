@@ -29,6 +29,19 @@ ROUTES = {
     "/ctonly": ("video/x-ms-wmv", PLAIN_BODY),
 }
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+REAL = os.path.join(HERE, "real.wmv")
+if os.path.exists(REAL):
+    with open(REAL, "rb") as f:
+        ROUTES["/real.wmv"] = ("video/x-ms-wmv", f.read())
+    print("real wmv loaded %d bytes" % os.path.getsize(REAL), flush=True)
+
+REAL_WMA = os.path.join(HERE, "real.wma")
+if os.path.exists(REAL_WMA):
+    with open(REAL_WMA, "rb") as f:
+        ROUTES["/real.wma"] = ("audio/x-ms-wma", f.read())
+    print("real wma loaded %d bytes" % os.path.getsize(REAL_WMA), flush=True)
+
 
 def handle(conn):
     try:

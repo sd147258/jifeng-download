@@ -57,8 +57,12 @@ Write-Host "5/7 inject classes.dex"
 & $PY "$PSScriptRoot\tools\add_dex.py" "$BUILD\base.apk" "$BUILD\dex\classes.dex" "$BUILD\unsigned.apk"
 if ($LASTEXITCODE -ne 0) { throw "dex inject failed" }
 
+Write-Host "5.5/7 inject jni libs"
+& $PY "$PSScriptRoot\tools\add_jni.py" "$BUILD\unsigned.apk" "$PSScriptRoot\jni" "$BUILD\withlib.apk"
+if ($LASTEXITCODE -ne 0) { throw "jni inject failed" }
+
 Write-Host "6/7 zipalign"
-& "$BT\zipalign.exe" -f 4 "$BUILD\unsigned.apk" "$BUILD\aligned.apk"
+& "$BT\zipalign.exe" -f 4 "$BUILD\withlib.apk" "$BUILD\aligned.apk"
 if ($LASTEXITCODE -ne 0) { throw "zipalign failed" }
 
 Write-Host "7/7 sign"

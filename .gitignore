@@ -28,3 +28,7 @@ keystore.properties
 patch*.py
 shot*.png
 !docs/screenshot*.png
+
+# android/jni 下的第三方预编译二进制（GPL .so）不入库
+android/jni/*.so
+android/jni/**/*.so
