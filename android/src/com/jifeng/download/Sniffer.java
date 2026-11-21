@@ -92,7 +92,7 @@ public class Sniffer {
                     + "[^\\s\"'<>\\u4e00-\\u9fa5]*/(?:[^\\s\"'<>\\u4e00-\\u9fa5]*))",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern MEDIA_RE = Pattern.compile(
-            "https?://[^\"'\\s<>]*\\.(?:mp4|m4a|mp3|mov|flv)",
+            "https?://[^\"'\\s<>]*\\.(?:mp4|m4a|mp3|mov|flv|wmv|wma|asf)",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern M3U8_RE = Pattern.compile(
             "https?://[^\"'\\s<>]*\\.m3u8",
@@ -100,7 +100,7 @@ public class Sniffer {
     /** 任意属性的媒体地址：src/data-src/data-url/file/video_url 等，常见于播放器初始化参数。 */
     private static final Pattern ATTR_SRC_RE = Pattern.compile(
             "(?:src|data-src|data-url|data-video|file|video_url|play_url)\\s*=\\s*[\"']"
-                    + "([^\"'<>]+\\.(?:mp4|m4a|mp3|webm|mov|flv)[^\"'<>]*)[\"']",
+                    + "([^\"'<>]+\\.(?:mp4|m4a|mp3|webm|mov|flv|wmv|wma|asf)[^\"'<>]*)[\"']",
             Pattern.CASE_INSENSITIVE);
 
     /** m3u8 地址，允许相对路径（//host/x.m3u8、/path/x.m3u8）。 */
