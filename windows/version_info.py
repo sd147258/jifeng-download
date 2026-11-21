@@ -4,8 +4,8 @@
 
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(1, 14, 0, 0),
-        prodvers=(1, 14, 0, 0),
+        filevers=(1, 15, 0, 0),
+        prodvers=(1, 15, 0, 0),
         mask=0x3f,
         flags=0x0,
         OS=0x40004,
@@ -21,11 +21,11 @@ VSVersionInfo(
                 [
                 StringStruct('CompanyName', 'JifengDownload'),
                 StringStruct('FileDescription', '疾风下载 多线程下载器'),
-                StringStruct('FileVersion', '1.14'),
+                StringStruct('FileVersion', '1.15'),
                 StringStruct('InternalName', 'JifengDownload'),
                 StringStruct('OriginalFilename', 'JifengDownload.exe'),
                 StringStruct('ProductName', '疾风下载'),
-                StringStruct('ProductVersion', '1.14'),
+                StringStruct('ProductVersion', '1.15'),
                 StringStruct('LegalCopyright', 'JifengDownload'),
                 ])
             ]),
