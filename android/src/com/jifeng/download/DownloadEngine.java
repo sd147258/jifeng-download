@@ -1475,6 +1475,9 @@ public class DownloadEngine {
     }
 
     /** 按文件头判定真实类型，返回扩展名（不含点），识别不出返回 null。 */
+    /** 最近一次 ffmpeg 转码的 stderr，仅用于失败原因排查。 */
+    public static volatile String lastFfmpegLog = "";
+
     static String sniffExt(byte[] b) {
         if (b == null || b.length < 4) return null;
         if (b.length >= 12 && b[4] == 0x66 && b[5] == 0x74 && b[6] == 0x79 && b[7] == 0x70) {
