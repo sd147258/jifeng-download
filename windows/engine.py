@@ -278,7 +278,7 @@ def _normalize_headers(extra):
         for k, v in extra.items():
             if v is None:
                 continue
-            out[str(k).strip()] = str(v)
+      out[str(k).strip()] = str(v)
     return out
 
 
@@ -355,7 +355,7 @@ def open_url(url, headers, timeout=30, max_attempts=MAX_ATTEMPTS):
             if resp is not None:
                 try:
                     resp.close()
-                except Exception:
+            except Exception:
                     pass
             raise
         except urllib.error.HTTPError as e:
@@ -440,7 +440,7 @@ class _ConnPool:
                 self._free.setdefault(key, []).append(conn)
         except Exception:
             try:
-                conn.close()
+        conn.close()
             except Exception:
                 pass
 
@@ -526,7 +526,8 @@ def probe(url, ua=DEFAULT_UA, timeout=20, extra_headers=None):
 
         if is_m3u8(url, ctype):
             info["kind"] = "m3u8"
-            info["type"] = ctype
+            in
+fo["type"] = ctype
             info["filename"] = _m3u8_default_name(url)
             return info
 
@@ -623,7 +624,8 @@ def adaptive_segment_count(total, ranges, prefer=0):
 class Segment:
     __slots__ = ("start", "end", "done")
 
-    def __init__(self, start, end, done=0):
+    def __
+init__(self, start, end, done=0):
         self.start = start
         self.end = end          # inclusive; -1 表示未知长度（读到 EOF）
         self.done = done
@@ -721,7 +723,8 @@ class Task:
         self.restart_requested = False
         self.requested_name = filename
         if filename:
-            self.filename = safe_filename(filename)
+            self.file
+name = safe_filename(filename)
         else:
             base = os.path.basename(urllib.parse.unquote(urllib.parse.urlparse(url).path))
             self.filename = safe_filename(base) if base else "download"
@@ -804,7 +807,6 @@ class Task:
             self._fh = open(self.path, mode, buffering=128 * 1024)
         return self._fh
 
-
     def close_file(self):
         if self._fh is not None:
             try:
@@ -813,7 +815,8 @@ class Task:
             except Exception:
                 pass
             try:
-                self._fh.close()
+ 
+               self._fh.close()
             except Exception:
                 pass
             self._fh = None
@@ -901,7 +904,8 @@ class Manager:
         self._bucket_lock = threading.Lock()
         self._tokens = float(self.rate_limit)
         self._bucket_t = time.time()
-        self._sched_stop = threading.Event()
+        self._sched_st
+op = threading.Event()
         threading.Thread(target=self._scheduler, daemon=True).start()
 
     # ---------------- 配置热更新 ----------------
@@ -979,7 +983,8 @@ class Manager:
                 if t.url == url:
                     if autostart and t.status in ("paused", "error", "pending"):
                         self.resume(t)
-                    return t
+          
+           return t
         task = Task(
             url, filename, dest,
             cfg.get("segments", 0),
@@ -1056,7 +1061,8 @@ class Manager:
             try:
                 total, written = ftpmod.fetch(
                     task.url, task.filename, task.dest_dir, have,
-                    on_data, stopped, throttle=self.throttle)
+       
+             on_data, stopped, throttle=self.throttle)
                 if total and total > 0:
                     task.total = total
                 attempts = 0
@@ -1134,7 +1140,8 @@ class Manager:
         task.started_at = time.time()
         self.notify(task)
 
-        # 找做种者：tracker 偶尔要等一会才有人，退避重试 3 次
+     
+   # 找做种者：tracker 偶尔要等一会才有人，退避重试 3 次
         peers = []
         for attempt in range(3):
             if task.stop_evt.is_set() or task.generation != gen:
@@ -1215,6 +1222,8 @@ class Manager:
             task.downloaded = task.total
             task.speed = 0.0
             task.status = "done"
+
+
             task.error = ""
             task.save_state(force=True)
             self.notify(task)
@@ -1293,7 +1302,8 @@ class Manager:
             task.close_file()
             self.notify(task)
 
-    def _free_name(self, task, filename):
+    def _free_name(self, task, fi
+lename):
         base, ext = os.path.splitext(filename)
         candidate = unique_path(task.dest_dir, filename)
         used = set(t.path for t in self.tasks if t is not task)
@@ -1368,7 +1378,8 @@ class Manager:
         remaining = seg.remaining()
         if remaining <= SPLIT_MIN_BYTES:
             return False
-        half = remaining // 2
+  
+      half = remaining // 2
         mid = seg.start + seg.done + half
         new = Segment(mid, seg.end)
         seg.end = mid - 1
@@ -1438,7 +1449,10 @@ class Manager:
                         fh.write(data)
                         seg.done += len(data)
                         task.downloaded += len(data)
-                    pos += len(data)
+          
+      
+      
+      pos += len(data)
                     if seg.end >= 0 and pos > seg.end:
                         break
 
@@ -1510,7 +1524,9 @@ class Manager:
                     self.notify(task)
                     return
                 time.sleep(min(8.0, 0.8 * (2 ** attempts)))
-            except Exception as e:
+            except Except
+
+ion as e:
                 if task.generation != gen:
                     return
                 if resp is not None:
@@ -1594,6 +1610,7 @@ class Manager:
         if task.seg_complete():
             task.close_file()
             try:
+
                 size = os.path.getsize(task.path)
                 if task.total > 0 and size != task.total:
                     raise DownloadError(
@@ -1668,7 +1685,8 @@ class Manager:
             fh.seek(0)
             fh.truncate(0)
             if task.total > 0:
-                fh.truncate(task.total)
+   
+             fh.truncate(task.total)
         self.notify(task)
 
     # ---------------- m3u8 ----------------
@@ -1738,7 +1756,9 @@ class Manager:
                     data = resp.read()
                     if not data:
                         raise DownloadError("分片 %d 内容为空" % idx)
-                    os.makedirs(task.parts_dir, exist_ok=True)
+                    os.makedirs(task.par
+
+ts_dir, exist_ok=True)
                     with open(self._seg_part_path(task, idx), "wb") as f:
                         f.write(data)
                     with task.lock:
@@ -1816,7 +1836,9 @@ class Manager:
                 raise DownloadError("部分分片未下载完成，可点「继续」重试")
 
         is_fmp4 = bool(task.m3u8.get("map"))
-        stem = os.path.splitext(task.filename)[0]
+        stem = os.path.splitex
+
+t(task.filename)[0]
         final_name = self._free_name(task, stem + (".mp4" if is_fmp4 else ".ts"))
         final_path = os.path.join(task.dest_dir, final_name)
 
@@ -1882,7 +1904,9 @@ class Manager:
             task.save_state(force=True)
             self.notify(task)
 
-    def resume(self, task):
+    def resum
+
+e(self, task):
         if task.status not in ("paused", "error"):
             return
         task.stop_evt.clear()
@@ -1954,6 +1978,7 @@ class Manager:
                 if os.path.exists(task.path) or kind == "m3u8":
                     loaded.append(task)
             except Exception:
+
                 continue
         if loaded:
             with self.lock:
