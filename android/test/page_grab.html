@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>抓取测试页</title></head>
+<body>
+<h1>疾风下载 · 整页抓取测试</h1>
+<p>下面这堆链接里，只有 .bin / .mp4 / .png 应该被抓出来；</p>
+<a href="big.bin">8MB 二进制</a><br>
+<a href="/mov_bbb.mp4">示例视频（绝对路径写法）</a><br>
+<img src="tiny.png"><br>
+<a href="note.html">普通网页，不该被当成下载文件</a><br>
+<a href="javascript:void(0)">javascript 伪链接</a><br>
+<div data-url="http://127.0.0.1:8771/big.bin">重复链接，应去重</div>
+</body></html>
