@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity implements TaskAdapter.Actions {
 
     private static final Pattern FILE_RE = Pattern.compile(
-            "\\\\.(zip|rar|7z|tar|gz|exe|apk|ipa|pdf|epub|mp4|mkv|avi|mov|mp3|flac|wav|docx?|xlsx?|pptx?|txt|csv|iso|bin)(\\\\?|#|$)",
+            "\\.(zip|rar|7z|tar|gz|exe|apk|ipa|pdf|epub|mp4|mkv|avi|mov|mp3|flac|wav|docx?|xlsx?|pptx?|txt|csv|iso|bin)(\\?|#|$)",
             Pattern.CASE_INSENSITIVE);
 
     private EditText input;
