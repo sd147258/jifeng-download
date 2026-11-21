@@ -10,6 +10,7 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.os.Handler;
 import android.view.View;
 import android.view.WindowManager;
@@ -38,6 +39,11 @@ public class PlayerActivity extends Activity {
     private TextView click;
     private TextView failMsg;
     private View ctrlBar;
+    private TextView hud;
+    private int seekFrom;
+    private int seekTo;
+    private boolean seeking;
+    private long touchDownAt;
 
     private Handler handler;
     private boolean prepared;
@@ -77,6 +83,7 @@ public class PlayerActivity extends Activity {
         click = (TextView) findViewById(R.id.btnClose);
         failMsg = (TextView) findViewById(R.id.failMsg);
         ctrlBar = findViewById(R.id.ctrlBar);
+        hud = (TextView) findViewById(R.id.hud);
         handler = new Handler();
 
         Intent it = getIntent();
@@ -89,18 +96,58 @@ public class PlayerActivity extends Activity {
         posKey = "p:" + (name == null || name.length() == 0 ? uriText : name);
         isStream = uriText != null && uriText.startsWith("http://127.0.0.1");
 
-        // 手势：双击暂停/继续，右侧上下划调音量，左侧上下划调亮度。
+        // 手势：左右滑快进/快退，双击暂停/继续，右侧上下划调音量，左侧上下划调亮度。
         video.setOnTouchListener(new View.OnTouchListener() {
             public boolean onTouch(View v, android.view.MotionEvent e) {
                 switch (e.getAction()) {
                     case android.view.MotionEvent.ACTION_DOWN:
                         touchX = e.getX();
                         touchY = e.getY();
+                        touchDownAt = System.currentTimeMillis();
+                        seeking = false;
+                        seekTo = -1;
+                        seekFrom = prepared ? video.getCurrentPosition() : 0;
+                        return true;
+                    case android.view.MotionEvent.ACTION_MOVE:
+                        float mdx = e.getX() - touchX;
+                        float mdy = Math.abs(e.getY() - touchY);
+                        if (!seeking && prepared && Math.abs(mdx) > 30 && Math.abs(mdx) > mdy * 1.5f) {
+                            seeking = true;
+                            dragging = true;
+                            seekFrom = video.getCurrentPosition();
+                            showHud();
+                        }
+                        if (seeking) {
+                            int dur = video.getDuration();
+                            int range = swipeRange(dur);
+                            int w = v.getWidth() > 0 ? v.getWidth() : 1;
+                            int delta = (int) (mdx / w * range);
+                            seekTo = Math.max(0, Math.min(dur > 0 ? dur : 0, seekFrom + delta));
+                            hud.setText((delta >= 0 ? "快进 +" : "快退 -") + fmt(Math.abs(delta))
+                                    + "\n" + fmt(seekTo) + " / " + fmt(dur));
+                            seek.setProgress(seekTo);
+                            clock.setText(fmt(seekTo) + " / " + fmt(dur));
+                        }
                         return true;
                     case android.view.MotionEvent.ACTION_UP:
-                        float dy = e.getY() - touchY;
                         float dx = Math.abs(e.getX() - touchX);
-                        if (Math.abs(dy) < 40 && dx < 40) {
+                        float dy = e.getY() - touchY;
+                        if (seeking) {
+                            boolean quick = System.currentTimeMillis() - touchDownAt < 160;
+                            seeking = false;
+                            dragging = false;
+                            if (prepared && seekTo >= 0) {
+                                video.seekTo(seekTo);
+                                seek.setProgress(seekTo);
+                                clock.setText(fmt(seekTo) + " / " + fmt(video.getDuration()));
+                                Log.i("JfPlay", "swipe seek -> " + seekTo + "ms from " + seekFrom
+                                        + " (quick=" + quick + ")");
+                            }
+                            handler.removeCallbacks(hudHide);
+                            handler.postDelayed(hudHide, 520);
+                            return true;
+                        }
+                        if (dx < 40 && Math.abs(dy) < 40) {
                             long now = System.currentTimeMillis();
                             if (now - lastTapAt < 300) {
                                 toggle();
@@ -108,8 +155,15 @@ public class PlayerActivity extends Activity {
                             } else {
                                 lastTapAt = now;
                             }
-                        } else if (Math.abs(dy) > 60) {
-                            adjust(-dy / 400f, e.getX() > video.getWidth() / 2);
+                        } else if (Math.abs(dy) > 60 && Math.abs(dy) > dx * 1.2f) {
+                            adjust(-dy / 400f, e.getX() > v.getWidth() / 2);
+                        }
+                        return true;
+                    case android.view.MotionEvent.ACTION_CANCEL:
+                        if (seeking) {
+                            seeking = false;
+                            dragging = false;
+                            hideHud();
                         }
                         return true;
                 }
@@ -193,6 +247,13 @@ public class PlayerActivity extends Activity {
                 btnPlay.setText("暂停");
                 handler.removeCallbacks(tick);
                 handler.post(tick);
+                if (hud != null && !pref.getBoolean("hint_swipe", false)) {
+                    hud.setText("左右滑动：快退 / 快进\n上下滑动：左亮度、右音量；双击：暂停/继续");
+                    hud.setVisibility(View.VISIBLE);
+                    handler.removeCallbacks(hudHide);
+                    handler.postDelayed(hudHide, 3600);
+                    pref.edit().putBoolean("hint_swipe", true).apply();
+                }
             }
         });
         video.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
@@ -274,6 +335,34 @@ public class PlayerActivity extends Activity {
                 }
             }
         }, delay);
+    }
+
+    private final Runnable hudHide = new Runnable() {
+        public void run() {
+            if (hud != null) hud.setVisibility(View.GONE);
+        }
+    };
+
+    /** 整屏宽度对应的快进/快退时长：短视频按 35% 时长，长片最多 2 分钟。 */
+    private int swipeRange(int dur) {
+        if (dur <= 0) return 30000;
+        int r = (int) (dur * 0.35f);
+        if (r < 10000) r = 10000;
+        if (r > 120000) r = 120000;
+        if (r > dur) r = dur;
+        return r;
+    }
+
+    private void showHud() {
+        if (hud == null) return;
+        handler.removeCallbacks(hudHide);
+        hud.setVisibility(View.VISIBLE);
+    }
+
+    private void hideHud() {
+        if (hud == null) return;
+        handler.removeCallbacks(hudHide);
+        hud.setVisibility(View.GONE);
     }
 
     /** 播放/暂停切换。 */
