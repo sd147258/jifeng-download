@@ -54,10 +54,10 @@ public class M3u8Downloader {
         boolean fmp4;
     }
 
-    private static final Pattern BANDWIDTH_RE = Pattern.compile("BANDWIDTH=(\\\\d+)");
-    private static final Pattern MAP_URI_RE = Pattern.compile("URI=\\\"([^\\\"]+)\\\"");
-    private static final Pattern MAP_BR_RE = Pattern.compile("BYTERANGE=\\\"(\\\\d+)(?:@(\\\\d+))?\\\"");
-    private static final Pattern SEG_BR_RE = Pattern.compile("^#EXT-X-BYTERANGE:(\\\\d+)(?:@(\\\\d+))?");
+    private static final Pattern BANDWIDTH_RE = Pattern.compile("BANDWIDTH=(\\d+)");
+    private static final Pattern MAP_URI_RE = Pattern.compile("URI=\"([^\"]+)\"");
+    private static final Pattern MAP_BR_RE = Pattern.compile("BYTERANGE=\"(\\d+)(?:@(\\d+))?\"");
+    private static final Pattern SEG_BR_RE = Pattern.compile("^#EXT-X-BYTERANGE:(\\d+)(?:@(\\d+))?");
     private static final int CONCURRENCY = 4;
     private static final int MAX_RETRY = 5;
 
@@ -91,7 +91,7 @@ public class M3u8Downloader {
             String ext = pl.fmp4 ? "mp4" : "ts";
             task.ext = ext;
             String base = DownloadEngine.nameFromUrl(playlistUrl);
-            base = base.replaceAll("\\\\.m3u8$", "");
+            base = base.replaceAll("\\.m3u8$", "");
             task.filename = DownloadEngine.freeName(dir, DownloadEngine.applyExt(DownloadEngine.safe(base), ext));
 
             File out = task.file();
@@ -176,7 +176,7 @@ public class M3u8Downloader {
 
     static List<Variant> parseMaster(String body, String baseUrl) {
         List<Variant> variants = new ArrayList<>();
-        String[] lines = body.split("\\\\r?\\\\n");
+        String[] lines = body.split("\\r?\\n");
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i].trim();
             if (!line.startsWith("#EXT-X-STREAM-INF")) continue;
@@ -209,7 +209,7 @@ public class M3u8Downloader {
 
     static MediaPlaylist parseMedia(String body, String baseUrl) {
         MediaPlaylist pl = new MediaPlaylist();
-        String[] lines = body.split("\\\\r?\\\\n");
+        String[] lines = body.split("\\r?\\n");
         // BYTERANGE 续接游标：未显式给 @offset 时，紧接上一个分片末尾。
         long cursor = 0;
         long pendingLen = -1;
