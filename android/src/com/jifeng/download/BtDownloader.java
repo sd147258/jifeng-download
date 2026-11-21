@@ -32,7 +32,7 @@ public class BtDownloader {
     /** DHT（BEP5）找源：默认开；自检可关。 */
     public static volatile boolean dhtEnabled = true;
     /** DHT 找源预算，自检可缩短。 */
-    public static volatile long dhtBudgetMs = 12000;
+    public static volatile long dhtBudgetMs = 18000;
     /** 自检：跳过 tracker，只走 DHT。 */
     public static volatile boolean forceDht = false;
     /** 自检：只做 DHT 找源，不真下载（用真实种子验证 DHT 连通性）。 */
@@ -81,6 +81,25 @@ public class BtDownloader {
         }
     }
 
+    /** 本机有没有 IPv4 地址：IPv6-only 的 5G 网络连不上 DHT 的 IPv4 节点。 */
+    private static boolean hasIpv4() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> en =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (en != null && en.hasMoreElements()) {
+                java.net.NetworkInterface ni = en.nextElement();
+                if (ni.isLoopback() || !ni.isUp()) continue;
+                java.util.Enumeration<java.net.InetAddress> ads = ni.getInetAddresses();
+                while (ads.hasMoreElements()) {
+                    java.net.InetAddress a = ads.nextElement();
+                    if (a instanceof java.net.Inet4Address && !a.isLoopbackAddress()) return true;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
     public void run() {
         try {
             inner();
@@ -100,7 +119,7 @@ public class BtDownloader {
     private void inner() throws Exception {
         Magnet m = Magnet.parse(t.url);
         if (m == null || !m.valid()) {
-            engine.btFail(t, "不是有效的磁力链接：缺 btih（种子哈希）");
+            engine.btFail(t, m == null ? "不是磁力链接（应以 magnet:? 开头）" : m.errorHint());
             return;
         }
         if (t.filename == null || t.filename.length() == 0) {
@@ -115,6 +134,7 @@ public class BtDownloader {
 
         List<String> trackers = forceDht ? new ArrayList<String>() : new ArrayList<String>(m.trackers);
         LinkedHashSet<String> peers = new LinkedHashSet<String>();
+        if (!forceDht) peers.addAll(m.peers);
         for (int i = 0; i < trackers.size() && i < 6; i++) {
             if (t.stop) {
                 log("stop-return tracker");
@@ -141,11 +161,21 @@ public class BtDownloader {
             return;
         }
         if (peers.isEmpty()) {
-            engine.btFail(t, trackers.isEmpty()
-                    ? "这条磁力链没有 tr=（tracker），DHT 也暂时没找到做种者："
-                    + "可能这会儿没人做种，或当前网络封了 DHT 的 UDP 端口。稍后再试，或换一条资源。"
+            String diag = Dht.lastStats.length() > 0 ? ("\nDHT 诊断：" + Dht.lastStats + "。") : "";
+            String net = !hasIpv4()
+                    ? "当前网络拿不到 IPv4 地址（IPv6-only），DHT 的 IPv4 节点连不上，换 Wi-Fi 再试。"
+                    : (Dht.lastResp > 0
+                    ? "DHT 是通的（有节点回应），说明这条链现在确实没有做种者，换一条资源更靠谱。"
+                    : "一个回应都没收到，说明 UDP 出站被挡了（部分 5G / 校园网 / 公司网会挡），换 Wi-Fi 或换个网络再试。");
+            String ws = m.webSeeds.isEmpty() ? ""
+                    : ("\n这条链带 ws=（Web Seed）直链：" + m.webSeeds.get(0)
+                    + "，可以复制它当普通链接直接下载。");
+            log("fail: " + diag + " | " + net);
+            engine.btFail(t, (trackers.isEmpty()
+                    ? "这条磁力链没有 tr=（tracker），DHT 也没找到做种者。" + diag
+                    + "也可能这会儿确实没人做种，稍后再试或换一条资源。" + net
                     : "tracker 和 DHT 都没找到做种者：可能这条种子已经没人做种，"
-                    + "或者当前网络访问不了它的 tracker。换一条资源或稍后再试。");
+                    + "或者当前网络访问不了它的 tracker。" + diag + "换一条资源或稍后再试。") + ws);
             return;
         }
 
