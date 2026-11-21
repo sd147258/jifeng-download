@@ -1,5 +1,5 @@
 """桌面端 BT 模块自测：走本机 tracker + seeder，下完和源文件比 SHA1。
-用法：先 py -3 ..\\android\\test\\bt_swarm.py，再 py -3 test_bt.py
+用法：先 py -3 ..\android\test\bt_swarm.py，再 py -3 test_bt.py
 """
 import hashlib
 import os
