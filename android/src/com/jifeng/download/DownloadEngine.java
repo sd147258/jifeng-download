@@ -1288,7 +1288,7 @@ public class DownloadEngine {
             if (referer != null && referer.length() > 0) req.append("Referer: ").append(referer).append("\r\n");
             if (cookie != null && cookie.length() > 0) req.append("Cookie: ").append(cookie).append("\r\n");
             if (range != null) req.append("Range: ").append(range).append("\r\n");
-            req.append("Connection: keep-alive\r\n\r\n");
+            req.append("Connection: keep-alive\r\r\n");
             try {
                 s.getOutputStream().write(req.toString().getBytes("ISO-8859-1"));
                 s.getOutputStream().flush();
@@ -1465,6 +1465,11 @@ public class DownloadEngine {
             case "audio/ogg":
             case "application/ogg": return "ogg";
             case "video/x-msvideo": return "avi";
+            case "video/x-ms-wmv":
+            case "video/x-ms-asf":
+            case "application/vnd.ms-asf":
+            case "application/x-ms-asf": return "wmv";
+            case "audio/x-ms-wma": return "wma";
             default: return "";
         }
     }
@@ -1487,6 +1492,13 @@ public class DownloadEngine {
         if (b[0] == 0x4F && b[1] == 0x67 && b[2] == 0x67 && b[3] == 0x53) return "ogg";
         if (b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46
                 && b.length >= 12 && b[8] == 0x41 && b[9] == 0x56 && b[10] == 0x49) return "avi";
+        // ASF 头 GUID 30 26 B2 75 8E 66 CF 11 A6 D9 00 AA 00 62 CE 6C（wmv / wma 共用）
+        if (b.length >= 16 && (b[0] & 0xFF) == 0x30 && (b[1] & 0xFF) == 0x26
+                && (b[2] & 0xFF) == 0xB2 && (b[3] & 0xFF) == 0x75 && (b[4] & 0xFF) == 0x8E
+                && (b[5] & 0xFF) == 0x66 && (b[6] & 0xFF) == 0xCF && (b[7] & 0xFF) == 0x11
+                && (b[8] & 0xFF) == 0xA6 && (b[9] & 0xFF) == 0xD9 && (b[10] & 0xFF) == 0x00
+                && (b[11] & 0xFF) == 0xAA && (b[12] & 0xFF) == 0x00 && (b[13] & 0xFF) == 0x62
+                && (b[14] & 0xFF) == 0xCE && (b[15] & 0xFF) == 0x6C) return "wmv";
         return null;
     }
 
