@@ -32,9 +32,11 @@ public final class Dht {
 
     private static final String[] DEFAULT_BOOT = {
             "router.bittorrent.com:6881",
-            "dht.transmissionbt.com:6881",
             "router.utorrent.com:6881",
+            "dht.transmissionbt.com:6881",
             "dht.libtorrent.org:25401",
+            "dht.aelitis.com:6881",
+            "router.bitcomet.com:6881",
     };
 
     /** 同一个 info_hash 10 分钟内复用的 peer 列表：重复点「继续」不用再走一轮 DHT。 */
@@ -42,11 +44,19 @@ public final class Dht {
     private static final java.util.Map<String, Object[]> CACHE =
             new java.util.LinkedHashMap<String, Object[]>();
 
-    private static final int MAX_QUERIES = 96;
+    private static final int MAX_QUERIES = 128;
     private static final int MAX_CAND = 400;
     private static final int MAX_PEERS = 200;
-    private static final int BATCH = 8;
-    private static final long ROUND_MS = 1800;
+    private static final int BATCH = 16;
+    private static final long ROUND_MS = 2200;
+
+    /** 上一次找到的节点地址：下次直接拿它们当起点，手机网络下比只靠引导节点快得多。 */
+    private static final List<String> NODE_POOL = new ArrayList<String>();
+    private static final int POOL_MAX = 160;
+    /** 最近一次找源的统计，失败时拼进错误提示，方便判断是「没人做种」还是「UDP 出不去」。 */
+    public static volatile String lastStats = "";
+    /** 最近一次找源收到多少个节点回应：>0 说明 UDP 出站是通的。 */
+    public static volatile int lastResp = 0;
 
     private Dht() {
     }
@@ -116,9 +126,13 @@ public final class Dht {
         Set<String> asked = new HashSet<String>();
         Map<String, byte[]> ids = new HashMap<String, byte[]>();
         List<Cand> cands = new ArrayList<Cand>();
+        synchronized (NODE_POOL) {
+            for (String a : NODE_POOL) cands.add(new Cand(a, null));
+        }
         for (String b : bootstrapNodes()) {
             cands.add(new Cand(b, null));
         }
+        int resp = 0;
         try {
             sock = new DatagramSocket();
             sock.setSoTimeout((int) ROUND_MS);
@@ -160,6 +174,7 @@ public final class Dht {
                         Object o = Bencode.decode(pack.getData(), pack.getOffset(), pack.getLength());
                         Map<String, Object> root = Bencode.map(o);
                         if (!"r".equals(Bencode.str(root.get("y")))) continue;
+                        resp++;
                         Map<String, Object> r = Bencode.map(root.get("r"));
                         if (DEBUG) System.out.println("resp from " + from + " keys=" + root.keySet()
                                 + " values=" + Bencode.list(r.get("values")).size()
@@ -207,6 +222,16 @@ public final class Dht {
                 CACHE.put(key, new Object[]{System.currentTimeMillis(), new ArrayList<String>(peers)});
             }
         }
+        synchronized (NODE_POOL) {
+            NODE_POOL.clear();
+            for (Cand c : cands) {
+                if (NODE_POOL.size() >= POOL_MAX) break;
+                if (!NODE_POOL.contains(c.addr)) NODE_POOL.add(c.addr);
+            }
+        }
+        lastStats = "询问 " + asked.size() + " 个节点，收到 " + resp + " 个回应，"
+                + "学到 " + cands.size() + " 个节点，找到 " + peers.size() + " 个 peer";
+        lastResp = resp;
         return peers;
     }
 
