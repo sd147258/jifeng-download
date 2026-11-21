@@ -1288,7 +1288,7 @@ public class DownloadEngine {
             if (referer != null && referer.length() > 0) req.append("Referer: ").append(referer).append("\r\n");
             if (cookie != null && cookie.length() > 0) req.append("Cookie: ").append(cookie).append("\r\n");
             if (range != null) req.append("Range: ").append(range).append("\r\n");
-            req.append("Connection: keep-alive\r\r\n");
+            req.append("Connection: keep-alive\r\n\r\n");
             try {
                 s.getOutputStream().write(req.toString().getBytes("ISO-8859-1"));
                 s.getOutputStream().flush();
