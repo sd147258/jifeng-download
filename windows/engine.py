@@ -148,6 +148,9 @@ CONTENT_TYPE_EXT = {
     "audio/mp4": ".m4a", "audio/mpeg": ".mp3", "audio/x-mpeg": ".mp3",
     "audio/flac": ".flac", "audio/ogg": ".ogg", "audio/wav": ".wav",
     "audio/aac": ".aac", "application/pdf": ".pdf",
+    "video/x-ms-wmv": ".wmv", "video/x-ms-asf": ".wmv",
+    "application/vnd.ms-asf": ".wmv", "application/x-ms-asf": ".wmv",
+    "audio/x-ms-wma": ".wma",
     "application/zip": ".zip", "application/x-zip-compressed": ".zip",
     "application/x-rar-compressed": ".rar", "application/vnd.rar": ".rar",
     "application/x-7z-compressed": ".7z", "application/gzip": ".gz",
@@ -191,6 +194,8 @@ def ext_from_head(head):
         return ".ogg"
     if b[:4] == b"RIFF" and b[8:12] == b"AVI ":
         return ".avi"
+    if b[:16] == b"\x30\x26\xb2\x75\x8e\x66\xcf\x11\xa6\xd9\x00\xaa\x00\x62\xce\x6c":
+        return ".wmv"
     if b[:2] == b"\x1f\x8b":
         return ".gz"
     return ""
@@ -798,6 +803,7 @@ class Task:
             # 带 128KB 写缓冲；不逐块 fsync，只在状态保存 / 收尾时落盘
             self._fh = open(self.path, mode, buffering=128 * 1024)
         return self._fh
+
 
     def close_file(self):
         if self._fh is not None:
