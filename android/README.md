@@ -112,7 +112,7 @@ adb reverse tcp:8000 tcp:8000
 - 播放器：进度条可拖动定位、当前/总时长、暂停继续、全屏（横屏 + 隐藏系统栏，返回键先退全屏）、「其他播放器」兜底、「关闭」。
 - 支持格式：mp4/m4v/mkv/mov/flv/webm/3gp/ts/avi 与 mp3/m4a/aac/flac/wav/ogg/opus；编码不被系统支持时给出中文原因（如部分 MKV/HEVC）。
 - 播放不打断正在进行的下载；退出播放页会 stopPlayback 并释放 VideoView。
-- 自检入口：db shell am start -n com.jifeng.download/.MainActivity --es play_uri <地址> 可直接拉起播放器，便于无触摸环境下验证。
+- 自检入口：\u0007db shell am start -n com.jifeng.download/.MainActivity --es play_uri <地址> 可直接拉起播放器，便于无触摸环境下验证。
 
 ## 任务分组（v1.9）
 - 顶部三个页签：进行中 / 已完成 / 失败，括号内是数量，切换后列表只显示该组。
@@ -482,3 +482,32 @@ Intent 的 extras 应用。之前用 `--ez meta_only true` 做过取证，下一
 | HTTP 8 MB 动态分段 | 8,388,608 B，md5 `58b120a538a3db0da0cdcd54e0e78c1b`，与服务端一致 |
 | 磁力（带 tracker） | 788,493 B，md5 `198918f40ecc7cab0fc4231adaf67c96`，与源一致；证明 Intent 复位没破坏正常磁力 |
 | 完成态 UI | 「已完成 1」页签 + `mix.bin 8.0 MB 已保存到 下载/疾风下载`，列表刷新节流后照常出卡片 |
+
+## v3.12：WMV / WMA（微软 ASF）识别
+
+下载器本来什么文件都能下，但 WMV 有两个具体坑，这一版专门补上：
+
+**坑一：链接没扩展名，文件被存成 `.bin`。**
+现在两条判据都认 ASF：
+
+- 文件头魔数 `30 26 B2 75 8E 66 CF 11 A6 D9 00 AA 00 62 CE 6C` → `.wmv`
+- `Content-Type`：`video/x-ms-wmv` / `video/x-ms-asf` / `application/vnd.ms-asf` → `.wmv`，
+  `audio/x-ms-wma` → `.wma`
+
+**坑二：点「打开」必然播放失败。**
+ASF 是微软私有封装，Android 系统解码器基本不支持，站内播放器（VideoView）放不了。
+所以 WMV/WMA/ASF 现在**不进站内播放器**，直接按 MIME 交给外部播放器，并提示
+「WMV/WMA 系统播放器解不了，已交给其他播放器打开」；正在下载的 WMV 也不会误走边下边播，
+而是提示等下载完再看。
+
+抓链白名单（`MEDIA_RE` / `ATTR_SRC_RE`）也加了 `wmv|wma|asf`，网页里抓到的 WMV 直链不会漏。
+
+### 设备实测（emulator-5556，三条判定路径各下一次）
+
+| 路由 | 服务器给的 | 落盘文件名 | 大小 |
+|---|---|---|---|
+| `/movie.wmv` | `video/x-ms-wmv` | `movie.wmv` | 1,048,592 B |
+| `/noext` | `application/octet-stream` + ASF 头 | `noext.wmv`（靠魔数） | 1,048,592 B |
+| `/ctonly` | `video/x-ms-wmv` + 随机字节 | `ctonly.wmv`（靠 Content-Type） | 1,048,576 B |
+
+三个任务全部「已完成」，文件在 `下载/疾风下载/`。
