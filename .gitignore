@@ -1,0 +1,30 @@
+# 构建产物与中间文件（不入库）
+build/
+dist/
+out/
+out_repro/
+smoke_dl/
+smoke_shots/
+perf/dl_*/
+*.apk
+*.apk.idsig
+*.exe
+*.pyc
+__pycache__/
+*.log
+*.jfstate
+*.jfstate.tmp
+.part
+
+# 签名私钥（绝不入库）
+*.keystore
+*.jks
+*.p12
+keystore.properties
+
+# 临时与调试产物
+*.tmp
+*.bak
+patch*.py
+shot*.png
+!docs/screenshot*.png
