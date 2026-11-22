@@ -1467,13 +1467,13 @@ public class DownloadEngine {
             case "video/x-msvideo": return "avi";
             case "video/x-ms-wmv":
             case "video/x-ms-asf":
-            case "application/vnd.ms-asf":
-            case "application/x-ms-asf": return "wmv";
+            case "application/vnd.ms-asf": return "wmv";
             case "audio/x-ms-wma": return "wma";
             default: return "";
         }
     }
 
+    /** 按文件头判定真实类型，返回扩展名（不含点），识别不出返回 null。 */
     /** 最近一次 ffmpeg 转码的 stderr，仅用于失败原因排查。 */
     public static volatile String lastFfmpegLog = "";
 
