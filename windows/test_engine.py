@@ -550,8 +550,8 @@ def main():
 
         # 17 自适应段数三档 + 不支持 Range 退化单流
         check("adaptive 1mb single seg", engine.adaptive_segment_count(1_000_000, True, 0) == 1)
-        check("adaptive 5mb two seg", engine.adaptive_segment_count(5_000_000, True, 0) == 2)
-        check("adaptive 50mb four seg", engine.adaptive_segment_count(50_000_000, True, 0) == 4)
+        check("adaptive 5mb four seg", engine.adaptive_segment_count(5_000_000, True, 0) == 4)
+        check("adaptive 50mb sixteen seg", engine.adaptive_segment_count(50_000_000, True, 0) == 16)
         check("adaptive norange single", engine.adaptive_segment_count(50_000_000, False, 0) == 1)
 
         # 18 二分重分段：区间连续不重叠，done 不重复计数
