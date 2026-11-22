@@ -1,10 +1,11 @@
 package com.jifeng.download;
 
+import android.util.Log;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -14,9 +15,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 本机流式服务：把正在下载的临时文件通过 127.0.0.1 的 HTTP 暴露给播放器，边下边播。
- * mp4 的 moov 索引常在尾部，这类文件做虚拟 faststart：单独取回 moov，喂给播放器时排在 mdat 前，
- * stco/co64 加上位移，于是播放器一开始就能读到索引，边下边播立刻出画面；真实文件不动。
+ * 本机流式服务：把正在下载的文件通过 127.0.0.1 的 HTTP 暴露给播放器，边下边播。
+ *
+ * 支持两种任务形态：
+ *  - 单流/成品/BT 落盘文件：直接顺序读，读到的长度按下载进度封顶；
+ *  - HTTP 多段并行：各段写在 <文件名>.p<段起始>，这里按全局偏移映射到对应临时件，
+ *    拼成一条虚拟字节流，段内只读到该段已经写入的部分。
+ *
+ * mp4 的 moov 索引常在尾部：单独向源站取回 moov，喂给播放器时排在 mdat 前，
+ * stco/co64 加上位移，于是播放器一开始就能读到索引；真实文件不动。
  */
 public class LocalStreamServer {
 
@@ -49,7 +56,9 @@ public class LocalStreamServer {
         synchronized (tasks) {
             tasks.put(task.id, task);
         }
-        return "http://127.0.0.1:" + socket.getLocalPort() + "/" + task.id;
+        String u = "http://127.0.0.1:" + socket.getLocalPort() + "/" + task.id;
+        Log.i("JfStream", "urlFor id=" + task.id + " -> " + u + " total=" + task.total + " segs=" + task.segments.size());
+        return u;
     }
 
     private void loop() {
@@ -69,50 +78,17 @@ public class LocalStreamServer {
         }
     }
 
-
-    /**
-     * 边播的数据源：已完成/已发布的成品直接用；下载中则用段临时件
-     * （单流任务的段起始为 0，临时件就是从头顺序写入的字节，正好可以边写边读）。
-     */
-    private File sourceFor(DownloadEngine.Task t) {
-        File done = t.file();
-        if (done.exists() && done.length() > 0) return done;
-        if (t.segments.size() == 1 && t.segments.get(0).start == 0) {
-            t.streamSingle = true;
-            File part = new File(t.destDir, t.filename + ".p0");
-            int waited = 0;
-            while (!part.exists() && waited < 12000
-                    && !("done".equals(t.status) || "error".equals(t.status)
-                    || "canceled".equals(t.status))) {
-                try {
-                    Thread.sleep(200);
-                } catch (Exception ignored) {
-                }
-                waited += 200;
-            }
-            return part;
-        }
-        return done;
-    }
-
-    private Mp4Faststart layoutFor(DownloadEngine.Task t, File f) {
-        // 源站不支持分片时没法单独把尾部索引取回来，直接顺序读（等到快下完自然会出画面）
+    private Mp4Faststart layoutFor(DownloadEngine.Task t, StreamSource src) {
+        // 源站不支持分片时没法单独把尾部索引取回来，直接顺序读（等快下完自然出画面）
         if (!t.supportsRange || t.total <= 0) return null;
         synchronized (layouts) {
             if (layoutTried.contains(t.id)) return layouts.get(t.id);
             layoutTried.add(t.id);
         }
         Mp4Faststart fs = null;
-        RandomAccessFile raf = null;
         try {
-            raf = new RandomAccessFile(f, "r");
-            fs = Mp4Faststart.build(t, f, raf);
+            fs = Mp4Faststart.buildFromHead(t, src.head(64 * 1024), src.total());
         } catch (Exception ignored) {
-        } finally {
-            try {
-                if (raf != null) raf.close();
-            } catch (Exception ignored) {
-            }
         }
         synchronized (layouts) {
             layouts.put(t.id, fs);
@@ -120,17 +96,15 @@ public class LocalStreamServer {
         return fs;
     }
 
-
-
     /** 索引在尾部的 mp4：做一份「索引在前」的边下边拷副本，播放器直接读它。 */
-    private ProxyCache proxyFor(DownloadEngine.Task t, File src, Mp4Faststart fs) {
-        if (fs == null) return null;
+    private ProxyCache proxyFor(DownloadEngine.Task t, StreamSource src, Mp4Faststart fs) {
+        if (fs == null || !src.isSingle()) return null;
         synchronized (proxies) {
             ProxyCache pc = proxies.get(t.id);
             if (pc != null) return pc;
         }
         try {
-            ProxyCache pc = ProxyCache.create(t, src, fs);
+            ProxyCache pc = ProxyCache.create(t, src.singleFile(), fs);
             synchronized (proxies) {
                 proxies.put(t.id, pc);
             }
@@ -142,11 +116,15 @@ public class LocalStreamServer {
 
     private void serve(Socket s) {
         OutputStream out = null;
-        RandomAccessFile raf = null;
-        ProxyCache proxy = null;
+        StreamSource src = null;
         try {
+            try {
+                s.setSoTimeout(2500);
+            } catch (Exception ignored) {
+            }
             BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));
             String first = in.readLine();
+            Log.i("JfStream", "conn " + first);
             if (first == null) {
                 s.close();
                 return;
@@ -160,7 +138,15 @@ public class LocalStreamServer {
             long from = 0;
             long want = -1;
             String line;
-            while ((line = in.readLine()) != null && line.length() > 0) {
+            int nh = 0;
+            while (true) {
+                try {
+                    line = in.readLine();
+                } catch (java.net.SocketTimeoutException ste) {
+                    break;
+                }
+                if (line == null || line.length() == 0) break;
+                nh++;
                 String low = line.toLowerCase();
                 if (low.startsWith("range:")) {
                     String v = line.substring(6).trim();
@@ -186,18 +172,31 @@ public class LocalStreamServer {
             synchronized (tasks) {
                 t = tasks.get(id);
             }
-            File f = t == null ? null : sourceFor(t);
             out = s.getOutputStream();
-            if (f == null || !f.exists()) {
+            if (t == null) {
+                out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes("UTF-8"));
                 out.flush();
                 return;
             }
 
-            Mp4Faststart fs = layoutFor(t, f);
-            long total = fs != null ? fs.virtualTotal : (t.total > 0 ? t.total : f.length());
-            proxy = proxyFor(t, f, fs);
-            if (proxy != null) fs = null;
-            if (total <= 0) total = f.length();
+            File done = t.file();
+            src = StreamSource.open(t, done.exists() ? done : null);
+            if (src == null) {
+                out.write("HTTP/1.1 503 No Source Yet\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes("UTF-8"));
+                out.flush();
+                return;
+            }
+
+            Mp4Faststart fs = layoutFor(t, src);
+            ProxyCache proxy = proxyFor(t, src, fs);
+            if (proxy != null) {
+                src.close();
+                src = StreamSource.forProxy(proxy.file(), proxy, fs.virtualTotal);
+                fs = null;
+            }
+
+            long total = fs != null ? fs.virtualTotal : src.total();
+            if (total <= 0) total = Math.max(1, t.total);
             if (from > total - 1) from = Math.max(0, total - 1);
             long end = want > 0 ? Math.min(want, total - 1) : total - 1;
             long len = end - from + 1;
@@ -205,6 +204,9 @@ public class LocalStreamServer {
             String mime = t.filename != null && t.filename.toLowerCase().endsWith(".mp3")
                     ? "audio/mpeg" : "video/mp4";
             if (t.contentType != null && t.contentType.toLowerCase().startsWith("audio/")) mime = t.contentType;
+            String mode = proxy != null ? "proxy" : (src.isSingle() ? "file" : "parts");
+            Log.i("JfStream", "open id=" + t.id + " mode=" + mode + " segs=" + t.segments.size()
+                    + " total=" + total + " range=" + from + "-" + end);
             String head = "HTTP/1.1 206 Partial Content\r\n"
                     + "Content-Type: " + mime + "\r\n"
                     + "Accept-Ranges: bytes\r\n"
@@ -214,10 +216,9 @@ public class LocalStreamServer {
             out.write(head.getBytes("UTF-8"));
             out.flush();
 
-            File src = proxy != null ? proxy.file() : f;
-            raf = new RandomAccessFile(src, "r");
             long pos = from;
             long waitSince = 0;
+            long served = 0;
             byte[] buf = new byte[64 * 1024];
             while (pos <= end) {
                 long origin = pos;
@@ -228,15 +229,13 @@ public class LocalStreamServer {
                         out.write(fs.moov, (int) off, n);
                         out.flush();
                         pos += n;
+                        served += n;
                         continue;
                     }
                     origin = pos < fs.insertAt ? pos : pos - fs.moovLen;
                 }
-                long avail = proxy != null ? proxy.available() : raf.length();
-                // 段临时件是预分配长度的，未写入区域是空洞；用真实下载进度封顶
-                if (proxy == null && t.segments.size() == 1 && t.segments.get(0).start == 0
-                        && t.downloaded < avail) avail = Math.max(0, t.downloaded);
-                if (origin >= avail) {
+                long ready = src.readEndAt(origin);
+                if (origin >= ready) {
                     if ("done".equals(t.status) || "error".equals(t.status)
                             || "canceled".equals(t.status)) break;
                     // 数据没追上：最多等 6 秒，再等下去播放器只会干挂到超时。
@@ -250,19 +249,26 @@ public class LocalStreamServer {
                     continue;
                 }
                 waitSince = 0;
-                long n = Math.min(buf.length, Math.min(end - pos + 1, avail - origin));
-                raf.seek(origin);
-                int r = raf.read(buf, 0, (int) n);
+                long n = Math.min(buf.length, Math.min(end - pos + 1, ready - origin));
+                if (fs != null && pos < fs.insertAt && pos + n > fs.insertAt) {
+                    // 不能一口气跨过插入点，否则 moov 会被原始字节整块盖过去。
+                    n = fs.insertAt - pos;
+                }
+                int r = src.readAt(origin, buf, 0, (int) n);
                 if (r <= 0) break;
                 out.write(buf, 0, r);
                 out.flush();
                 pos += r;
+                served += r;
+            }
+            if (served > 0) {
+                Log.i("JfStream", "served id=" + t.id + " bytes=" + served + " next=" + pos);
             }
         } catch (Exception ignored) {
             // 播放器中断连接属于正常现象
         } finally {
             try {
-                if (raf != null) raf.close();
+                if (src != null) src.close();
             } catch (Exception ignored) {
             }
             try {

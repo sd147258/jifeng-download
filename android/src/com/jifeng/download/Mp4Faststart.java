@@ -26,26 +26,17 @@ public class Mp4Faststart {
     private static final long MAX_MOOV_FETCH = 8L * 1024 * 1024;
 
     /** 已经是 faststart（moov 在前）或解析不了时返回 null，调用方退回直读模式。 */
-    public static Mp4Faststart build(DownloadEngine.Task t, File f, RandomAccessFile raf) {
+    public static Mp4Faststart buildFromHead(DownloadEngine.Task t, byte[] headRaw, long avail) {
         try {
             long total = t.total;
-            long avail = raf.length();
-            if (t.segments.size() == 1 && t.segments.get(0).start == 0
-                    && t.downloaded < avail) avail = Math.max(0, t.downloaded);  // preallocAvail
-            if (total <= 0 || avail < 64) return null;
+            if (total <= 0 || avail < 64 || headRaw == null) return null;
             if (t.filename == null) return null;
             String name = t.filename.toLowerCase();
             if (!(name.endsWith(".mp4") || name.endsWith(".m4v") || name.endsWith(".mov"))) return null;
 
-            int headLen = (int) Math.min(avail, 64 * 1024);
-            byte[] head = new byte[headLen];
-            raf.seek(0);
-            int got = 0;
-            while (got < headLen) {
-                int r = raf.read(head, got, headLen - got);
-                if (r <= 0) break;
-                got += r;
-            }
+            int headLen = (int) Math.min(avail, Math.min(headRaw.length, 64 * 1024));
+            byte[] head = headRaw;
+            int got = headLen;
             if (got < 128) return null;
 
             long mdatStart = -1;
@@ -75,7 +66,8 @@ public class Mp4Faststart {
 
             long moovStart = mdatStart + mdatSize;
             if (moovStart + 8 > total) return null;
-            long fetchLen = Math.min(MAX_MOOV_FETCH, total - moovStart);
+            // 先只取 64 KB 够读出 moov 头；moov 更大再按精确长度补取，避免为几十 KB 的索引去拖几 MB。
+            long fetchLen = Math.min(64 * 1024, total - moovStart);
 
             byte[] tail = fetchRange(t, moovStart, moovStart + fetchLen - 1);
             if (tail == null || tail.length < 8) return null;
@@ -86,7 +78,11 @@ public class Mp4Faststart {
                 moovSize = u64(tail, 8);
                 moovHdr = 16;
             }
-            if (moovSize < moovHdr || moovSize > tail.length) return null;
+            if (moovSize < moovHdr) return null;
+            if (moovSize > tail.length) {
+                tail = fetchRange(t, moovStart, moovStart + moovSize - 1);
+                if (tail == null || tail.length < moovSize) return null;
+            }
             if (moovStart + moovSize > total) return null;
 
             byte[] mo = new byte[(int) moovSize];
@@ -166,8 +162,8 @@ public class Mp4Faststart {
             }
             if (size < hdr || p + size > end) return;
             if ("stco".equals(type)) {
-                int count = (int) u32(b, p + hdr + 8);
-                int q = p + hdr + 12;
+                int count = (int) u32(b, p + hdr + 4);
+                int q = p + hdr + 8;
                 for (int i = 0; i < count && q + 4 <= p + size; i++, q += 4) {
                     long v = u32(b, q) + delta;
                     b[q] = (byte) (v >>> 24);
@@ -176,8 +172,8 @@ public class Mp4Faststart {
                     b[q + 3] = (byte) v;
                 }
             } else if ("co64".equals(type)) {
-                int count = (int) u32(b, p + hdr + 8);
-                int q = p + hdr + 12;
+                int count = (int) u32(b, p + hdr + 4);
+                int q = p + hdr + 8;
                 for (int i = 0; i < count && q + 8 <= p + size; i++, q += 8) {
                     long v = u64(b, q) + delta;
                     b[q] = (byte) (v >>> 56);
