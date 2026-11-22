@@ -273,7 +273,7 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
         }
         if (intent.getBooleanExtra("stream_first", false)) {
             for (DownloadEngine.Task t : DownloadService.snapshot()) {
-                if (!"done".equals(t.status) && t.segments.size() <= 1 && isMedia(t.filename)) {
+                if (!"done".equals(t.status) && !t.btMulti && isMedia(t.filename)) {
                     onOpen(t);
                     return;
                 }
@@ -986,14 +986,18 @@ public class MainActivity extends Activity implements TaskAdapter.Actions {
     }
 
     public void onOpen(DownloadEngine.Task t) {
-        // 正在下载的单流媒体：走本机 HTTP 边下边播，不用等下载完。
+        // 正在下载的媒体：走本机 HTTP 边下边播。多段并行也能播，服务端按段拼字节流。
         if (!"done".equals(t.status) && isAsf(t.filename)) {
             toast("WMV/WMA 是微软 ASF 封装，不支持边下边播；下载完用其他播放器打开");
             return;
         }
         if (!"done".equals(t.status) && isMedia(t.filename)) {
-            if (t.segments.size() > 1) {
-                toast("这是多段并行的任务，等下载完再播放才不会有花屏");
+            if (t.btMulti) {
+                toast("多文件种子下载后是一个目录，不能边下边播；等下载完再打开");
+                return;
+            }
+            if (t.total <= 0) {
+                toast("这个任务还没拿到文件大小，等开始下载再试边下边播");
                 return;
             }
             if ("running".equals(t.status) || "preparing".equals(t.status) || "paused".equals(t.status)) {
