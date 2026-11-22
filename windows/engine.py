@@ -39,7 +39,7 @@ def decode_thunder(text):
 
 CHUNK = 256 * 1024
 READ_BUFFER = 512 * 1024
-MAX_AUTO_SEGMENTS = 16       # 自适应模式下动态升段的上限
+MAX_AUTO_SEGMENTS = 24       # 自适应模式下动态升段的上限
 CONNECT_TIMEOUT = 15         # 建连超时（与读超时分开）
 READ_TIMEOUT = 30           # 单段读超时；超时后该段从断点续传
 SPLIT_MIN_BYTES = 512 * 1024  # 剩余区间大于该值才允许二分拆分
@@ -601,7 +601,8 @@ def plan_segments(total, count):
 
 
 def adaptive_segment_count(total, ranges, prefer=0):
-    """<2MB→1，<8MB→2，<64MB→4，<200MB→8，≥200MB→16；不支持 Range 退回 1。"""
+    """<2MB→1，<8MB→4，<64MB→16，<200MB→20，≥200MB→24；不支持 Range 退回 1。
+    16 路是实测拐点：8MB 限速 320KB/s/连接 时 2/8/12/16/20 路 = 13.4/3.9/2.5/2.2/1.5 秒。"""
     if not ranges or total <= 0:
         return 1
     if prefer and int(prefer) > 0:
@@ -609,13 +610,13 @@ def adaptive_segment_count(total, ranges, prefer=0):
     elif total < 2 * 1024 * 1024:
         count = 1
     elif total < 8 * 1024 * 1024:
-        count = 2
-    elif total < 64 * 1024 * 1024:
         count = 4
-    elif total < 200 * 1024 * 1024:
-        count = 8
-    else:
+    elif total < 64 * 1024 * 1024:
         count = 16
+    elif total < 200 * 1024 * 1024:
+        count = 20
+    else:
+        count = 24
     count = min(count, max(1, total // MIN_SEG_BYTES))
     return max(1, count)
 
