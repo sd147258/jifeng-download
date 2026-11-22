@@ -1467,7 +1467,8 @@ public class DownloadEngine {
             case "video/x-msvideo": return "avi";
             case "video/x-ms-wmv":
             case "video/x-ms-asf":
-            case "application/vnd.ms-asf": return "wmv";
+            case "application/vnd.ms-asf":
+            case "application/x-ms-asf": return "wmv";
             case "audio/x-ms-wma": return "wma";
             default: return "";
         }
