@@ -664,3 +664,33 @@ Manifest 已升 `versionName 3.16` / `versionCode 36`，APK 46,683,865 B。
 | 双击 | 暂停 / 继续正常 |
 
 Manifest 已升 `versionName 3.17` / `versionCode 37`，APK 46,688,030 B。
+
+
+## v3.18：边下边播（下载中直接播放）
+
+### 问题
+正在下载的任务点播放一律被拦：「这是多段并行的任务，等下载完再播放才不会有花屏」。
+原因是 `DownloadEngine.planCount` 对 ≥2 MB 文件起步就切 4 段（≥8 MB 切 8 段），而 `onOpen` 只要看到 `segments.size() > 1` 就拒绝；几乎全部视频都进不去播放器。
+
+### 改法
+- 新增 `StreamSource.java`：把「边下边播的字节源」抽象成两类
+  - 单文件（成品 / BT 落盘文件）：顺序读，可读长度按已下载进度或代理副本进度封顶
+  - HTTP 多段临时件 `<文件名>.p<段起始>`：按全局偏移映射到对应段，段内只读到 `seg.done`，拼成一条虚拟字节流
+- `LocalStreamServer.java` 重写：
+  - 用 `StreamSource` 拼字节流，多段任务也能边下边播
+  - MP4 索引（moov）在尾部的，向源站单独 Range 取索引，在本地流里把 moov 插到 mdat 前面（faststart），播放器不用等整段下载就能出画面
+  - 索引先只取 64 KB 读 moov 头，moov 更大再按精确长度补取，不再为几十 KB 索引去拖几 MB
+  - 播放器读到未下载区域时最多等 6 秒，超时主动断开让播放器重连；下载追上来后继续
+  - 新增 `JfStream` 日志：`open mode=parts|file|proxy …` / `served bytes=…`
+- `Mp4Faststart.java` 改为 `buildFromHead(Task, head, avail)`，索引偏移按插入长度整体平移
+- `MainActivity.onOpen` 去掉多段拦截，只保留两种确实不能播的情况：多文件种子（下载完是目录）、还没拿到文件大小；自检入口 `stream_first` 同步放宽
+
+### 验证（模拟器 emulator-5556，限速 120 KB/s 源）
+| 检查项 | 结果 |
+|---|---|
+| 下载中任务点播放 | 进入播放器，标题「big.mp4（边下边播）」，画面正常出图 |
+| 播放进度 | 0:07 / 0:10，下载仍在后台继续 |
+| 多段任务 | `mode=parts segs=8`，按 8 个临时段拼流 |
+| 索引前置 | `moov` 插入到 mdat 前，播放器无需等整文件下完 |
+
+Manifest 已升 `versionName 3.18` / `versionCode 38`，APK 46,688,030 B。
