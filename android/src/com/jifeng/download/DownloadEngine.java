@@ -44,7 +44,7 @@ public class DownloadEngine {
     public static final String UA =
             "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) "
             + "Chrome/131.0.0.0 Mobile Safari/537.36";
-    private static final int CHUNK = 64 * 1024;
+    private static final int CHUNK = 128 * 1024;
     private static final long MIN_SEG = 256 * 1024;
 
     /** 全局限速（字节/秒），0 表示不限。所有分段共享一个令牌桶。 */
@@ -78,7 +78,7 @@ public class DownloadEngine {
         }
     }
 
-    private static final int MAX_SEGMENTS = 8;
+    private static final int MAX_SEGMENTS = 16;
     /** 连接复用允许切到多小：剩余段小于它就不再切，避免碎片过多 */
     private static final long MIN_TAIL = 128 * 1024;
 
@@ -1474,7 +1474,6 @@ public class DownloadEngine {
         }
     }
 
-    /** 按文件头判定真实类型，返回扩展名（不含点），识别不出返回 null。 */
     /** 最近一次 ffmpeg 转码的 stderr，仅用于失败原因排查。 */
     public static volatile String lastFfmpegLog = "";
 
@@ -1636,7 +1635,7 @@ public class DownloadEngine {
         int n;
         if (total < 2L * 1024 * 1024) n = 1;
         else if (total < 8L * 1024 * 1024) n = 4;
-        else n = MAX_SEGMENTS;
+        else n = MAX_SEGMENTS;   // ≥8MB 直接 16 路；实测 8MB/12/16 路为 3.94s/2.53s/2.17s（限速 320KB/s 单连接）
         return Math.max(1, Math.min(n, (int) Math.max(1, total / MIN_SEG)));
     }
 
